@@ -296,11 +296,13 @@
         </div>
 
         <div class="lg:col-span-2 glass-card rounded-3xl p-5 flex flex-col h-[520px]">
-          <div class="border-b border-slate-700/80 pb-3 mb-3">
-            <h4 id="chatTitle" class="font-bold text-white text-sm">Select a request to start chatting</h4>
-            <p id="chatSub" class="text-xs text-slate-400">In-app communication keeps personal details safe.</p>
+          <div class="border-b border-slate-700/80 pb-3 mb-3 flex items-center justify-between">
+            <div>
+              <h4 id="chatTitle" class="font-bold text-white text-sm">Select a request to start chatting</h4>
+              <p id="chatSub" class="text-xs text-slate-400">In-app communication keeps personal details safe.</p>
+            </div>
           </div>
-          <div id="chatMessages" class="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar flex items-center justify-center">
+          <div id="chatMessages" class="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar flex flex-col justify-center items-center">
             <span class="text-slate-500 text-xs">No active conversation selected</span>
           </div>
           <form id="chatForm" onsubmit="handleSendMessage(event)" class="pt-3 border-t border-slate-700/80 flex gap-2">
@@ -430,7 +432,7 @@
     let isRegisterMode = false;
     let currentUser = null;
     let isAdminUnlocked = false;
-    const ADMIN_PASSWORD = "admin@12369";
+    const ADMIN_PASSWORD = "admin123";
 
     let booksData = [];
     let requestsData = [];
@@ -635,7 +637,6 @@
 
       try {
         await window.fbMethods.addDoc(window.fbMethods.collection(window.db, "books"), newBook);
-        alert('Listing published successfully!');
       } catch (err) {
         console.log("Firestore add error:", err);
       }
@@ -643,6 +644,7 @@
       booksData.unshift({ id: 'local_' + Date.now(), ...newBook });
       document.getElementById('addBookForm').reset();
       showView('homeView');
+      alert('Listing published successfully!');
     }
 
     function requestBook(bookId) {
@@ -669,8 +671,9 @@
         { sender: 'System', text: `Exchange request initiated for "${book.title}".` }
       ];
 
-      alert(`Request sent to ${book.sellerName}! Check Requests & Chat view.`);
+      alert(`Request sent to ${book.sellerName}! Opening chat view.`);
       showView('requestsView');
+      selectChat(newReq.id);
     }
 
     function renderRequests() {
@@ -681,7 +684,7 @@
       }
 
       container.innerHTML = requestsData.map(r => `
-        <div onclick="selectChat('${r.id}')" class="p-3 bg-slate-900/80 border border-slate-800 hover:border-indigo-500/40 rounded-xl cursor-pointer transition space-y-1">
+        <div onclick="selectChat('${r.id}')" class="p-3 bg-slate-900/80 border ${activeChatRequestId === r.id ? 'border-indigo-500' : 'border-slate-800'} hover:border-indigo-500/40 rounded-xl cursor-pointer transition space-y-1">
           <div class="flex justify-between items-center">
             <span class="text-xs font-bold text-white truncate max-w-[150px]">${r.bookTitle}</span>
             <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">${r.status}</span>
@@ -693,6 +696,8 @@
 
     function selectChat(reqId) {
       activeChatRequestId = reqId;
+      renderRequests();
+      
       const req = requestsData.find(r => r.id === reqId);
       if (!req) return;
 
@@ -701,7 +706,7 @@
       
       const msgs = messagesData[reqId] || [];
       const msgBox = document.getElementById('chatMessages');
-      msgBox.classList.remove('flex', 'items-center', 'justify-center');
+      msgBox.classList.remove('flex-col', 'justify-center', 'items-center');
       
       msgBox.innerHTML = msgs.map(m => `
         <div class="flex flex-col ${m.sender === (currentUser ? currentUser.displayName : 'You') ? 'items-end' : 'items-start'}">
@@ -711,18 +716,24 @@
           </div>
         </div>
       `).join('');
+      msgBox.scrollTop = msgBox.scrollHeight;
     }
 
     function handleSendMessage(e) {
       e.preventDefault();
-      if (!activeChatRequestId) return;
+      if (!activeChatRequestId) {
+        alert('Please select or create an exchange request first.');
+        return;
+      }
       const input = document.getElementById('chatInput');
       const text = input.value.trim();
       if (!text) return;
 
       if (!messagesData[activeChatRequestId]) messagesData[activeChatRequestId] = [];
+      const senderName = currentUser ? currentUser.displayName : 'You';
+      
       messagesData[activeChatRequestId].push({
-        sender: currentUser ? currentUser.displayName : 'You',
+        sender: senderName,
         text: text
       });
 
