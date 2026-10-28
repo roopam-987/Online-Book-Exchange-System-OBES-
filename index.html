@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Online Book Exchange System (OBES) - MIT AOE</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+      color: #f8fafc;
+      min-height: 100vh;
+    }
+    .glass-card {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .glass-nav {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(99, 102, 241, 0.5);
+      border-radius: 4px;
+    }
+  </style>
+
+  <!-- Firebase Modular SDK & Initialization -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { 
+      getAuth, 
+      createUserWithEmailAndPassword, 
+      signInWithEmailAndPassword, 
+      signOut 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { 
+      getFirestore, 
+      collection, 
+      addDoc, 
+      getDocs, 
+      query, 
+      orderBy, 
+      serverTimestamp 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // Your exact Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyApSztyw2el-lf9rw8CfX8JtKrY_jAfrlM",
+      authDomain: "obes-app-5b1d7.firebaseapp.com",
+      projectId: "obes-app-5b1d7",
+      storageBucket: "obes-app-5b1d7.firebasestorage.app",
+      messagingSenderId: "300750556612",
+      appId: "1:300750556612:web:5fee8ccaf8975658516891"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // Expose globally for application scripts
+    window.db = db;
+    window.auth = auth;
+    window.fbMethods = {
+      createUserWithEmailAndPassword,
+      signInWithEmailAndPassword,
+      signOut,
+      collection,
+      addDoc,
+      getDocs,
+      query,
+      orderBy,
+      serverTimestamp
+    };
+
+    console.log("Firebase connected successfully to obes-app-5b1d7!");
+  </script>
+</head>
+<body class="custom-scrollbar" onload="initApp()">
+
+  <!-- TOP NAVIGATION BAR -->
+  <nav class="glass-nav sticky top-0 z-50 px-4 lg:px-8 py-3 flex items-center justify-between">
+    <div class="flex items-center space-x-3 cursor-pointer" onclick="showView('homeView')">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-indigo-500/30">
+        <i class="fa-solid font-bold text-lg fa-book-open"></i>
+      </div>
+      <div>
+        <span class="font-extrabold text-xl bg-gradient-to-r from-indigo-400 to-purple-300 bg-clip-text text-transparent">OBES</span>
+        <span class="hidden sm:inline-block text-xs text-slate-400 block -mt-1 font-medium">MIT AOE Book Exchange</span>
+      </div>
+    </div>
+
+    <!-- Nav Links -->
+    <div id="navLinks" class="hidden md:flex items-center space-x-6 text-sm font-medium">
+      <button onclick="showView('homeView')" class="hover:text-indigo-400 transition">Explore Books</button>
+      <button onclick="showView('addListingView')" class="hover:text-indigo-400 transition"><i class="fa-solid fa-plus-circle mr-1"></i> List a Book</button>
+      <button onclick="showView('myListingsView')" class="hover:text-indigo-400 transition">My Listings</button>
+      <button onclick="showView('requestsView')" class="hover:text-indigo-400 transition">Requests & Chat</button>
+      <button onclick="handleAdminClick()" class="hover:text-indigo-400 transition text-amber-400"><i class="fa-solid fa-shield-halved mr-1"></i> Admin</button>
+    </div>
+
+    <!-- User Profile / Auth Status -->
+    <div class="flex items-center space-x-3">
+      <div id="userProfileBtn" class="hidden items-center space-x-2 bg-slate-800/80 border border-slate-700 px-3 py-1.5 rounded-full">
+        <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white" id="userAvatar">U</div>
+        <span class="text-xs font-semibold text-slate-200 hidden sm:inline" id="navUserName">User</span>
+      </div>
+      <button id="authToggleBtn" onclick="showView('authView')" class="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-indigo-500/20 transition">
+        Login / Register
+      </button>
+    </div>
+  </nav>
+
+  <!-- MAIN CONTAINER -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+    <!-- HOME VIEW -->
+    <section id="homeView" class="space-y-6">
+      <div class="glass-card rounded-3xl p-6 sm:p-8 relative overflow-hidden">
+        <div class="max-w-2xl relative z-10 space-y-4">
+          <span class="px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-full text-xs font-semibold uppercase tracking-wider border border-indigo-500/30">MIT AOE Student Portal</span>
+          <h1 class="text-3xl sm:text-4xl font-extrabold text-white leading-tight">Exchange & Buy Textbooks directly from College Peers</h1>
+          <p class="text-slate-300 text-sm">Save money every semester by trading verified course books directly on campus.</p>
+          
+          <div class="flex flex-col sm:flex-row gap-3 pt-2">
+            <div class="relative flex-1">
+              <i class="fa-solid fa-magnifying-glass absolute left-4 top-3.5 text-slate-400"></i>
+              <input type="text" id="searchInput" onkeyup="filterBooks()" placeholder="Search title, author, or subject..." class="w-full pl-11 pr-4 py-3 bg-slate-900/80 border border-slate-700 rounded-2xl text-sm focus:outline-none focus:border-indigo-500 text-white placeholder-slate-500">
+            </div>
+            <button onclick="filterBooks()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-2xl text-sm transition shadow-lg shadow-indigo-600/30">
+              Search
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div class="glass-card rounded-2xl p-5 space-y-5 h-fit">
+          <h3 class="font-bold text-slate-200 text-base flex items-center justify-between">
+            <span><i class="fa-solid fa-sliders text-indigo-400 mr-2"></i> Filters</span>
+            <button onclick="resetFilters()" class="text-xs text-indigo-400 hover:underline">Reset</button>
+          </h3>
+
+          <div>
+            <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">Subject / Department</label>
+            <select id="filterSubject" onchange="filterBooks()" class="w-full bg-slate-900/80 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+              <option value="">All Subjects</option>
+              <option value="Software Engineering">Software Engineering</option>
+              <option value="Computer Science">Computer Science</option>
+              <option value="Information Technology">Information Technology</option>
+              <option value="Electronics">Electronics</option>
+              <option value="Mathematics">Mathematics</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">Semester</label>
+            <select id="filterSemester" onchange="filterBooks()" class="w-full bg-slate-900/80 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+              <option value="">All Semesters</option>
+              <option value="1">Semester 1</option>
+              <option value="2">Semester 2</option>
+              <option value="3">Semester 3</option>
+              <option value="4">Semester 4</option>
+              <option value="5">Semester 5</option>
+              <option value="6">Semester 6</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">Listing Type</label>
+            <select id="filterType" onchange="filterBooks()" class="w-full bg-slate-900/80 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+              <option value="">All Types</option>
+              <option value="Sell">Sell Only</option>
+              <option value="Exchange">Exchange Only</option>
+              <option value="Both">Both (Sell / Exchange)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">Condition</label>
+            <select id="filterCondition" onchange="filterBooks()" class="w-full bg-slate-900/80 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+              <option value="">Any Condition</option>
+              <option value="New">New</option>
+              <option value="Good">Good</option>
+              <option value="Fair">Fair</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="lg:col-span-3">
+          <div id="booksGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            <!-- Dynamic Books Grid -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ADD BOOK VIEW -->
+    <section id="addListingView" class="hidden max-w-2xl mx-auto">
+      <div class="glass-card rounded-3xl p-6 sm:p-8 space-y-6">
+        <div>
+          <h2 class="text-2xl font-bold text-white">List a Book for Sale or Exchange</h2>
+          <p class="text-xs text-slate-400 mt-1">Provide accurate details to help peers find your textbook easily.</p>
+        </div>
+
+        <form id="addBookForm" onsubmit="handleCreateListing(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Book Title *</label>
+            <input type="text" id="bookTitle" required class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Author *</label>
+              <input type="text" id="bookAuthor" required class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Subject / Department *</label>
+              <input type="text" id="bookSubject" required placeholder="e.g. Software Engineering" class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Semester *</label>
+              <select id="bookSemester" required class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                <option value="1">Semester 1</option>
+                <option value="2">Semester 2</option>
+                <option value="3">Semester 3</option>
+                <option value="4">Semester 4</option>
+                <option value="5">Semester 5</option>
+                <option value="6">Semester 6</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Condition *</label>
+              <select id="bookCondition" required class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                <option value="New">New</option>
+                <option value="Good">Good</option>
+                <option value="Fair">Fair</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Listing Type *</label>
+              <select id="bookType" required class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                <option value="Sell">Sell Only</option>
+                <option value="Exchange">Exchange Only</option>
+                <option value="Both">Both</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Price (₹) *</label>
+            <input type="number" id="bookPrice" min="0" value="0" required class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Description / Notes</label>
+            <textarea id="bookDesc" rows="3" placeholder="Mention edition, highlighting, or swap preferences..." class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500"></textarea>
+          </div>
+
+          <div class="pt-2 flex gap-3">
+            <button type="button" onclick="showView('homeView')" class="w-1/2 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs transition">Cancel</button>
+            <button type="submit" class="w-1/2 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-xs transition shadow-lg shadow-indigo-600/30">Publish Listing</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- REQUESTS & CHAT VIEW -->
+    <section id="requestsView" class="hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="glass-card rounded-3xl p-5 space-y-4">
+          <h3 class="font-bold text-slate-200 text-base">Exchange Requests</h3>
+          <div id="requestsContainer" class="space-y-3">
+            <p class="text-xs text-slate-500 text-center py-6">No requests yet.</p>
+          </div>
+        </div>
+
+        <div class="lg:col-span-2 glass-card rounded-3xl p-5 flex flex-col h-[520px]">
+          <div class="border-b border-slate-700/80 pb-3 mb-3">
+            <h4 id="chatTitle" class="font-bold text-white text-sm">Select a request to start chatting</h4>
+            <p id="chatSub" class="text-xs text-slate-400">In-app communication keeps personal details safe.</p>
+          </div>
+          <div id="chatMessages" class="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar flex items-center justify-center">
+            <span class="text-slate-500 text-xs">No active conversation selected</span>
+          </div>
+          <form id="chatForm" onsubmit="handleSendMessage(event)" class="pt-3 border-t border-slate-700/80 flex gap-2">
+            <input type="text" id="chatInput" placeholder="Type your message..." class="flex-1 bg-slate-900/80 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+            <button type="submit" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-xs transition">Send</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- AUTH VIEW -->
+    <section id="authView" class="hidden max-w-md mx-auto">
+      <div class="glass-card rounded-3xl p-6 sm:p-8 space-y-6">
+        <div class="text-center">
+          <h2 id="authTitle" class="text-2xl font-bold text-white">Student Login</h2>
+          <p class="text-xs text-slate-400 mt-1">Access campus textbook listings and chats</p>
+        </div>
+
+        <form id="authForm" onsubmit="handleAuthSubmit(event)" class="space-y-4">
+          <div id="fullNameGroup" class="hidden">
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Full Name *</label>
+            <input type="text" id="authName" class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">College Email *</label>
+            <input type="email" id="authEmail" required class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Password *</label>
+            <input type="password" id="authPassword" required minlength="6" class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+          </div>
+
+          <button type="submit" id="authSubmitBtn" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-xs transition shadow-lg shadow-indigo-600/30">
+            Sign In
+          </button>
+        </form>
+
+        <div class="text-center pt-2">
+          <button onclick="toggleAuthMode()" id="authToggleText" class="text-xs text-indigo-400 hover:underline">
+            Don't have an account? Register here
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ADMIN PASSWORD GATEKEEPER MODAL -->
+    <section id="adminGateView" class="hidden max-w-md mx-auto">
+      <div class="glass-card rounded-3xl p-6 sm:p-8 space-y-6">
+        <div class="text-center space-y-2">
+          <div class="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30 mx-auto flex items-center justify-center text-xl">
+            <i class="fa-solid fa-lock"></i>
+          </div>
+          <h2 class="text-2xl font-bold text-white">Admin Access</h2>
+          <p class="text-xs text-slate-400">Enter the administrator password to access moderation tools</p>
+        </div>
+
+        <form onsubmit="handleAdminAuth(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Admin Password</label>
+            <input type="password" id="adminPassInput" placeholder="Enter admin password" required class="w-full bg-slate-900/80 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500">
+            <p class="text-[10px] text-slate-500 mt-1">Default password: <code class="text-amber-400">admin123</code></p>
+          </div>
+
+          <div class="flex gap-3">
+            <button type="button" onclick="showView('homeView')" class="w-1/2 py-2.5 bg-slate-800 text-slate-300 font-semibold rounded-xl text-xs">Cancel</button>
+            <button type="submit" class="w-1/2 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-xl text-xs shadow-lg shadow-amber-600/30">Unlock</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- ADMIN VIEW -->
+    <section id="adminView" class="hidden space-y-6">
+      <div class="glass-card rounded-3xl p-6 space-y-4">
+        <div class="flex justify-between items-center">
+          <h2 class="text-xl font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-shield-halved text-amber-400"></i> Admin Moderation Dashboard
+          </h2>
+          <button onclick="lockAdminSession()" class="px-3 py-1 bg-red-500/20 text-red-300 border border-red-500/30 rounded-xl text-xs font-medium hover:bg-red-500/30">
+            <i class="fa-solid fa-lock mr-1"></i> Lock Dashboard
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="bg-slate-900/60 border border-slate-800 p-4 rounded-2xl">
+            <span class="text-xs text-slate-400">Total Listings</span>
+            <p id="statTotalBooks" class="text-2xl font-extrabold text-indigo-400">0</p>
+          </div>
+          <div class="bg-slate-900/60 border border-slate-800 p-4 rounded-2xl">
+            <span class="text-xs text-slate-400">Completed Exchanges</span>
+            <p id="statExchangedBooks" class="text-2xl font-extrabold text-emerald-400">0</p>
+          </div>
+          <div class="bg-slate-900/60 border border-slate-800 p-4 rounded-2xl">
+            <span class="text-xs text-slate-400">Active Listings</span>
+            <p id="statActiveBooks" class="text-2xl font-extrabold text-purple-400">0</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass-card rounded-3xl p-6">
+        <h3 class="font-bold text-slate-200 text-sm mb-4">Manage System Listings</h3>
+        <div id="adminListingsTable" class="space-y-3">
+          <p class="text-xs text-slate-500">Loading listings...</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- MY LISTINGS VIEW -->
+    <section id="myListingsView" class="hidden space-y-6">
+      <div class="flex justify-between items-center">
+        <h2 class="text-2xl font-bold text-white">My Posted Listings</h2>
+        <button onclick="showView('addListingView')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-xs">
+          + Add New Listing
+        </button>
+      </div>
+      <div id="myListingsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <!-- Injected via JS -->
+      </div>
+    </section>
+
+  </main>
+
+  <!-- APPLICATION LOGIC -->
+  <script>
+    let isRegisterMode = false;
+    let currentUser = null;
+    let isAdminUnlocked = false;
+    const ADMIN_PASSWORD = "admin@12369";
+
+    let booksData = [];
+    let requestsData = [];
+    let messagesData = {};
+    let activeChatRequestId = null;
+
+    function initApp() {
+      fetchBooksFromFirestore();
+    }
+
+    function showView(viewId) {
+      ['homeView', 'addListingView', 'requestsView', 'authView', 'adminGateView', 'adminView', 'myListingsView'].forEach(v => {
+        const el = document.getElementById(v);
+        if (el) el.classList.add('hidden');
+      });
+      const active = document.getElementById(viewId);
+      if (active) active.classList.remove('hidden');
+
+      if (viewId === 'homeView') fetchBooksFromFirestore();
+      if (viewId === 'adminView') renderAdminDashboard();
+      if (viewId === 'myListingsView') renderMyListings();
+      if (viewId === 'requestsView') renderRequests();
+    }
+
+    function handleAdminClick() {
+      if (isAdminUnlocked) {
+        showView('adminView');
+      } else {
+        showView('adminGateView');
+      }
+    }
+
+    function handleAdminAuth(e) {
+      e.preventDefault();
+      const input = document.getElementById('adminPassInput').value;
+      if (input === ADMIN_PASSWORD) {
+        isAdminUnlocked = true;
+        document.getElementById('adminPassInput').value = '';
+        showView('adminView');
+      } else {
+        alert('Incorrect admin password!');
+      }
+    }
+
+    function lockAdminSession() {
+      isAdminUnlocked = false;
+      showView('homeView');
+    }
+
+    function toggleAuthMode() {
+      isRegisterMode = !isRegisterMode;
+      document.getElementById('fullNameGroup').classList.toggle('hidden', !isRegisterMode);
+      document.getElementById('authTitle').innerText = isRegisterMode ? 'Student Registration' : 'Student Login';
+      document.getElementById('authSubmitBtn').innerText = isRegisterMode ? 'Create Account' : 'Sign In';
+      document.getElementById('authToggleText').innerText = isRegisterMode ? 'Already have an account? Login' : "Don't have an account? Register here";
+    }
+
+    async function handleAuthSubmit(e) {
+      e.preventDefault();
+      const email = document.getElementById('authEmail').value;
+      const password = document.getElementById('authPassword').value;
+      const name = document.getElementById('authName').value || email.split('@')[0];
+
+      try {
+        if (isRegisterMode) {
+          const res = await window.fbMethods.createUserWithEmailAndPassword(window.auth, email, password);
+          currentUser = { uid: res.user.uid, email, displayName: name };
+          alert('Registration successful!');
+        } else {
+          const res = await window.fbMethods.signInWithEmailAndPassword(window.auth, email, password);
+          currentUser = { uid: res.user.uid, email, displayName: res.user.email.split('@')[0] };
+          alert('Login successful!');
+        }
+
+        document.getElementById('navUserName').innerText = currentUser.displayName;
+        document.getElementById('userAvatar').innerText = currentUser.displayName.charAt(0).toUpperCase();
+        document.getElementById('userProfileBtn').classList.remove('hidden');
+        document.getElementById('userProfileBtn').classList.add('flex');
+        document.getElementById('authToggleBtn').innerText = 'Logout';
+        document.getElementById('authToggleBtn').onclick = handleLogout;
+
+        showView('homeView');
+      } catch (err) {
+        alert('Auth Error: ' + err.message);
+      }
+    }
+
+    async function handleLogout() {
+      try {
+        await window.fbMethods.signOut(window.auth);
+        currentUser = null;
+        document.getElementById('userProfileBtn').classList.add('hidden');
+        document.getElementById('authToggleBtn').innerText = 'Login / Register';
+        document.getElementById('authToggleBtn').onclick = () => showView('authView');
+        showView('homeView');
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function fetchBooksFromFirestore() {
+      try {
+        const q = window.fbMethods.query(window.fbMethods.collection(window.db, "books"), window.fbMethods.orderBy("createdAt", "desc"));
+        const snapshot = await window.fbMethods.getDocs(q);
+        booksData = [];
+        snapshot.forEach(docSnap => {
+          booksData.push({ id: docSnap.id, ...docSnap.data() });
+        });
+      } catch (err) {
+        console.log("Using local state fallback:", err);
+        if (booksData.length === 0) {
+          booksData = [
+            {
+              id: 'demo1',
+              title: 'Software Engineering',
+              author: 'Ian Sommerville',
+              subject: 'Software Engineering',
+              semester: '3',
+              condition: 'Good',
+              type: 'Sell',
+              price: 350,
+              status: 'Available',
+              sellerName: 'Roopam Aswar',
+              sellerId: 'demo_user_1',
+              desc: 'Clean condition textbook.'
+            }
+          ];
+        }
+      }
+      filterBooks();
+    }
+
+    function filterBooks() {
+      const search = document.getElementById('searchInput').value.toLowerCase();
+      const subject = document.getElementById('filterSubject').value;
+      const semester = document.getElementById('filterSemester').value;
+      const type = document.getElementById('filterType').value;
+      const condition = document.getElementById('filterCondition').value;
+
+      const filtered = booksData.filter(b => {
+        const matchSearch = (b.title || '').toLowerCase().includes(search) || (b.author || '').toLowerCase().includes(search) || (b.subject || '').toLowerCase().includes(search);
+        const matchSub = !subject || b.subject === subject;
+        const matchSem = !semester || b.semester === semester;
+        const matchType = !type || b.type === type;
+        const matchCond = !condition || b.condition === condition;
+        return matchSearch && matchSub && matchSem && matchType && matchCond;
+      });
+
+      const container = document.getElementById('booksGrid');
+      if (filtered.length === 0) {
+        container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400 text-sm">No textbooks found matching your search.</div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map(b => `
+        <div class="glass-card rounded-2xl p-5 flex flex-col justify-between space-y-4 hover:border-indigo-500/50 transition duration-300">
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold ${b.status === 'Available' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'}">
+                ${b.status || 'Available'}
+              </span>
+              <span class="text-xs font-semibold text-slate-400">Sem ${b.semester}</span>
+            </div>
+            <h4 class="font-bold text-white text-base leading-snug">${b.title}</h4>
+            <p class="text-xs text-slate-300">by ${b.author}</p>
+            <div class="flex items-center gap-2 pt-1">
+              <span class="text-xs px-2 py-0.5 bg-slate-800 rounded text-slate-300 border border-slate-700">${b.subject}</span>
+              <span class="text-xs px-2 py-0.5 bg-slate-800 rounded text-slate-300 border border-slate-700">${b.condition}</span>
+            </div>
+            <p class="text-xs text-slate-400 pt-1 line-clamp-2">${b.desc || ''}</p>
+          </div>
+
+          <div class="pt-3 border-t border-slate-700/60 flex items-center justify-between">
+            <div>
+              <span class="text-[10px] text-slate-400 block">Price / Type</span>
+              <span class="text-sm font-extrabold text-indigo-400">${b.type === 'Exchange' ? 'Swap Only' : '₹' + b.price}</span>
+            </div>
+            <button onclick="requestBook('${b.id}')" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl transition">
+              Request Book
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function handleCreateListing(e) {
+      e.preventDefault();
+      const newBook = {
+        title: document.getElementById('bookTitle').value,
+        author: document.getElementById('bookAuthor').value,
+        subject: document.getElementById('bookSubject').value,
+        semester: document.getElementById('bookSemester').value,
+        condition: document.getElementById('bookCondition').value,
+        type: document.getElementById('bookType').value,
+        price: Number(document.getElementById('bookPrice').value),
+        status: 'Available',
+        sellerName: currentUser ? currentUser.displayName : 'Student Seller',
+        sellerId: currentUser ? currentUser.uid : 'anon',
+        desc: document.getElementById('bookDesc').value,
+        createdAt: window.fbMethods.serverTimestamp()
+      };
+
+      try {
+        await window.fbMethods.addDoc(window.fbMethods.collection(window.db, "books"), newBook);
+        alert('Listing published successfully!');
+      } catch (err) {
+        console.log("Firestore add error:", err);
+      }
+
+      booksData.unshift({ id: 'local_' + Date.now(), ...newBook });
+      document.getElementById('addBookForm').reset();
+      showView('homeView');
+    }
+
+    function requestBook(bookId) {
+      if (!currentUser) {
+        alert('Please login or register first to send an exchange request.');
+        showView('authView');
+        return;
+      }
+
+      const book = booksData.find(b => b.id === bookId);
+      if (!book) return;
+
+      const newReq = {
+        id: 'req_' + Date.now(),
+        bookId: book.id,
+        bookTitle: book.title,
+        sellerName: book.sellerName,
+        buyerName: currentUser.displayName,
+        status: 'Pending'
+      };
+
+      requestsData.push(newReq);
+      messagesData[newReq.id] = [
+        { sender: 'System', text: `Exchange request initiated for "${book.title}".` }
+      ];
+
+      alert(`Request sent to ${book.sellerName}! Check Requests & Chat view.`);
+      showView('requestsView');
+    }
+
+    function renderRequests() {
+      const container = document.getElementById('requestsContainer');
+      if (requestsData.length === 0) {
+        container.innerHTML = `<p class="text-xs text-slate-500 text-center py-6">No active requests found.</p>`;
+        return;
+      }
+
+      container.innerHTML = requestsData.map(r => `
+        <div onclick="selectChat('${r.id}')" class="p-3 bg-slate-900/80 border border-slate-800 hover:border-indigo-500/40 rounded-xl cursor-pointer transition space-y-1">
+          <div class="flex justify-between items-center">
+            <span class="text-xs font-bold text-white truncate max-w-[150px]">${r.bookTitle}</span>
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">${r.status}</span>
+          </div>
+          <p class="text-[11px] text-slate-400">Seller: ${r.sellerName} | Buyer: ${r.buyerName}</p>
+        </div>
+      `).join('');
+    }
+
+    function selectChat(reqId) {
+      activeChatRequestId = reqId;
+      const req = requestsData.find(r => r.id === reqId);
+      if (!req) return;
+
+      document.getElementById('chatTitle').innerText = req.bookTitle;
+      document.getElementById('chatSub').innerText = `Chatting with ${req.sellerName}`;
+      
+      const msgs = messagesData[reqId] || [];
+      const msgBox = document.getElementById('chatMessages');
+      msgBox.classList.remove('flex', 'items-center', 'justify-center');
+      
+      msgBox.innerHTML = msgs.map(m => `
+        <div class="flex flex-col ${m.sender === (currentUser ? currentUser.displayName : 'You') ? 'items-end' : 'items-start'}">
+          <span class="text-[9px] text-slate-500 mb-0.5">${m.sender}</span>
+          <div class="max-w-[80%] px-3 py-2 rounded-2xl text-xs ${m.sender === 'System' ? 'bg-slate-800 text-slate-400 italic text-center w-full' : m.sender === (currentUser ? currentUser.displayName : 'You') ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-200'}">
+            ${m.text}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function handleSendMessage(e) {
+      e.preventDefault();
+      if (!activeChatRequestId) return;
+      const input = document.getElementById('chatInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      if (!messagesData[activeChatRequestId]) messagesData[activeChatRequestId] = [];
+      messagesData[activeChatRequestId].push({
+        sender: currentUser ? currentUser.displayName : 'You',
+        text: text
+      });
+
+      input.value = '';
+      selectChat(activeChatRequestId);
+    }
+
+    function renderAdminDashboard() {
+      document.getElementById('statTotalBooks').innerText = booksData.length;
+      document.getElementById('statActiveBooks').innerText = booksData.filter(b => b.status === 'Available').length;
+      document.getElementById('statExchangedBooks').innerText = booksData.filter(b => b.status === 'Exchanged').length;
+
+      const table = document.getElementById('adminListingsTable');
+      if (booksData.length === 0) {
+        table.innerHTML = `<p class="text-xs text-slate-500">No listings found.</p>`;
+        return;
+      }
+
+      table.innerHTML = booksData.map(b => `
+        <div class="flex items-center justify-between p-3 bg-slate-900/60 border border-slate-800 rounded-xl text-xs">
+          <div>
+            <span class="font-bold text-white block">${b.title}</span>
+            <span class="text-slate-400">Seller: ${b.sellerName} | ₹${b.price}</span>
+          </div>
+          <button onclick="removeListing('${b.id}')" class="px-2.5 py-1 bg-red-500/20 text-red-300 border border-red-500/30 rounded-lg hover:bg-red-500/30">
+            Remove
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function removeListing(id) {
+      booksData = booksData.filter(b => b.id !== id);
+      renderAdminDashboard();
+      filterBooks();
+    }
+
+    function renderMyListings() {
+      const container = document.getElementById('myListingsGrid');
+      const myBooks = booksData.filter(b => currentUser && b.sellerId === currentUser.uid);
+
+      if (myBooks.length === 0) {
+        container.innerHTML = `<div class="col-span-full text-center py-10 text-slate-400 text-xs">You have not posted any textbook listings yet.</div>`;
+        return;
+      }
+
+      container.innerHTML = myBooks.map(b => `
+        <div class="glass-card rounded-2xl p-4 space-y-2">
+          <h4 class="font-bold text-white text-sm">${b.title}</h4>
+          <p class="text-xs text-slate-400">Status: <span class="text-emerald-400 font-semibold">${b.status}</span></p>
+          <button onclick="removeListing('${b.id}')" class="w-full py-2 bg-red-600/20 text-red-300 text-xs font-semibold rounded-xl border border-red-500/30">Delete Listing</button>
+        </div>
+      `).join('');
+    }
+
+    function resetFilters() {
+      document.getElementById('filterSubject').value = '';
+      document.getElementById('filterSemester').value = '';
+      document.getElementById('filterType').value = '';
+      document.getElementById('filterCondition').value = '';
+      document.getElementById('searchInput').value = '';
+      filterBooks();
+    }
+  </script>
+</body>
+</html>
