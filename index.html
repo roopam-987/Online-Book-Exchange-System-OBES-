@@ -41,22 +41,27 @@
     }
   </style>
 
-  <!-- Firebase Modular SDK & Initialization -->
+  <!-- Firebase Modular SDK Integration -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { 
       getAuth, 
       createUserWithEmailAndPassword, 
       signInWithEmailAndPassword, 
-      signOut 
+      signOut,
+      onAuthStateChanged
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
     import { 
       getFirestore, 
       collection, 
       addDoc, 
       getDocs, 
+      doc,
+      deleteDoc,
       query, 
+      where,
       orderBy, 
+      onSnapshot,
       serverTimestamp 
     } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
@@ -75,22 +80,27 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    // Expose globally for application scripts
+    // Expose globally
     window.db = db;
     window.auth = auth;
     window.fbMethods = {
       createUserWithEmailAndPassword,
       signInWithEmailAndPassword,
       signOut,
+      onAuthStateChanged,
       collection,
       addDoc,
       getDocs,
+      doc,
+      deleteDoc,
       query,
+      where,
       orderBy,
+      onSnapshot,
       serverTimestamp
     };
 
-    console.log("Firebase connected successfully to obes-app-5b1d7!");
+    console.log("Firebase connected successfully!");
   </script>
 </head>
 <body class="custom-scrollbar" onload="initApp()">
@@ -350,7 +360,7 @@
       </div>
     </section>
 
-    <!-- ADMIN PASSWORD GATEKEEPER MODAL -->
+    <!-- ADMIN GATEVIEW -->
     <section id="adminGateView" class="hidden max-w-md mx-auto">
       <div class="glass-card rounded-3xl p-6 sm:p-8 space-y-6">
         <div class="text-center space-y-2">
@@ -436,11 +446,35 @@
 
     let booksData = [];
     let requestsData = [];
-    let messagesData = {};
     let activeChatRequestId = null;
+    let chatUnsubscribe = null;
 
     function initApp() {
-      fetchBooksFromFirestore();
+      // Firebase Auth state listener
+      window.fbMethods.onAuthStateChanged(window.auth, (user) => {
+        if (user) {
+          currentUser = {
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName || user.email.split('@')[0]
+          };
+          document.getElementById('navUserName').innerText = currentUser.displayName;
+          document.getElementById('userAvatar').innerText = currentUser.displayName.charAt(0).toUpperCase();
+          document.getElementById('userProfileBtn').classList.remove('hidden');
+          document.getElementById('userProfileBtn').classList.add('flex');
+          document.getElementById('authToggleBtn').innerText = 'Logout';
+          document.getElementById('authToggleBtn').onclick = handleLogout;
+          
+          listenToFirestoreRequests();
+        } else {
+          currentUser = null;
+          document.getElementById('userProfileBtn').classList.add('hidden');
+          document.getElementById('authToggleBtn').innerText = 'Login / Register';
+          document.getElementById('authToggleBtn').onclick = () => showView('authView');
+        }
+      });
+
+      listenToFirestoreBooks();
     }
 
     function showView(viewId) {
@@ -451,24 +485,19 @@
       const active = document.getElementById(viewId);
       if (active) active.classList.remove('hidden');
 
-      if (viewId === 'homeView') fetchBooksFromFirestore();
       if (viewId === 'adminView') renderAdminDashboard();
       if (viewId === 'myListingsView') renderMyListings();
       if (viewId === 'requestsView') renderRequests();
     }
 
     function handleAdminClick() {
-      if (isAdminUnlocked) {
-        showView('adminView');
-      } else {
-        showView('adminGateView');
-      }
+      if (isAdminUnlocked) showView('adminView');
+      else showView('adminGateView');
     }
 
     function handleAdminAuth(e) {
       e.preventDefault();
-      const input = document.getElementById('adminPassInput').value;
-      if (input === ADMIN_PASSWORD) {
+      if (document.getElementById('adminPassInput').value === ADMIN_PASSWORD) {
         isAdminUnlocked = true;
         document.getElementById('adminPassInput').value = '';
         showView('adminView');
@@ -494,26 +523,15 @@
       e.preventDefault();
       const email = document.getElementById('authEmail').value;
       const password = document.getElementById('authPassword').value;
-      const name = document.getElementById('authName').value || email.split('@')[0];
 
       try {
         if (isRegisterMode) {
-          const res = await window.fbMethods.createUserWithEmailAndPassword(window.auth, email, password);
-          currentUser = { uid: res.user.uid, email, displayName: name };
+          await window.fbMethods.createUserWithEmailAndPassword(window.auth, email, password);
           alert('Registration successful!');
         } else {
-          const res = await window.fbMethods.signInWithEmailAndPassword(window.auth, email, password);
-          currentUser = { uid: res.user.uid, email, displayName: res.user.email.split('@')[0] };
+          await window.fbMethods.signInWithEmailAndPassword(window.auth, email, password);
           alert('Login successful!');
         }
-
-        document.getElementById('navUserName').innerText = currentUser.displayName;
-        document.getElementById('userAvatar').innerText = currentUser.displayName.charAt(0).toUpperCase();
-        document.getElementById('userProfileBtn').classList.remove('hidden');
-        document.getElementById('userProfileBtn').classList.add('flex');
-        document.getElementById('authToggleBtn').innerText = 'Logout';
-        document.getElementById('authToggleBtn').onclick = handleLogout;
-
         showView('homeView');
       } catch (err) {
         alert('Auth Error: ' + err.message);
@@ -523,46 +541,28 @@
     async function handleLogout() {
       try {
         await window.fbMethods.signOut(window.auth);
-        currentUser = null;
-        document.getElementById('userProfileBtn').classList.add('hidden');
-        document.getElementById('authToggleBtn').innerText = 'Login / Register';
-        document.getElementById('authToggleBtn').onclick = () => showView('authView');
         showView('homeView');
       } catch (err) {
         console.error(err);
       }
     }
 
-    async function fetchBooksFromFirestore() {
-      try {
-        const q = window.fbMethods.query(window.fbMethods.collection(window.db, "books"), window.fbMethods.orderBy("createdAt", "desc"));
-        const snapshot = await window.fbMethods.getDocs(q);
+    // REAL-TIME FIRESTORE BOOK LISTINGS
+    function listenToFirestoreBooks() {
+      const q = window.fbMethods.query(
+        window.fbMethods.collection(window.db, "books"),
+        window.fbMethods.orderBy("createdAt", "desc")
+      );
+
+      window.fbMethods.onSnapshot(q, (snapshot) => {
         booksData = [];
         snapshot.forEach(docSnap => {
           booksData.push({ id: docSnap.id, ...docSnap.data() });
         });
-      } catch (err) {
-        console.log("Using local state fallback:", err);
-        if (booksData.length === 0) {
-          booksData = [
-            {
-              id: 'demo1',
-              title: 'Software Engineering',
-              author: 'Ian Sommerville',
-              subject: 'Software Engineering',
-              semester: '3',
-              condition: 'Good',
-              type: 'Sell',
-              price: 350,
-              status: 'Available',
-              sellerName: 'Roopam Aswar',
-              sellerId: 'demo_user_1',
-              desc: 'Clean condition textbook.'
-            }
-          ];
-        }
-      }
-      filterBooks();
+        filterBooks();
+      }, (err) => {
+        console.log("Firestore sync notice:", err);
+      });
     }
 
     function filterBooks() {
@@ -620,6 +620,12 @@
 
     async function handleCreateListing(e) {
       e.preventDefault();
+      if (!currentUser) {
+        alert('Please login first to create a listing.');
+        showView('authView');
+        return;
+      }
+
       const newBook = {
         title: document.getElementById('bookTitle').value,
         author: document.getElementById('bookAuthor').value,
@@ -629,25 +635,24 @@
         type: document.getElementById('bookType').value,
         price: Number(document.getElementById('bookPrice').value),
         status: 'Available',
-        sellerName: currentUser ? currentUser.displayName : 'Student Seller',
-        sellerId: currentUser ? currentUser.uid : 'anon',
+        sellerName: currentUser.displayName,
+        sellerId: currentUser.uid,
         desc: document.getElementById('bookDesc').value,
         createdAt: window.fbMethods.serverTimestamp()
       };
 
       try {
         await window.fbMethods.addDoc(window.fbMethods.collection(window.db, "books"), newBook);
+        alert('Listing published successfully to Cloud Firestore!');
+        document.getElementById('addBookForm').reset();
+        showView('homeView');
       } catch (err) {
-        console.log("Firestore add error:", err);
+        alert('Firestore Error: ' + err.message);
       }
-
-      booksData.unshift({ id: 'local_' + Date.now(), ...newBook });
-      document.getElementById('addBookForm').reset();
-      showView('homeView');
-      alert('Listing published successfully!');
     }
 
-    function requestBook(bookId) {
+    // REAL-TIME FIRESTORE REQUESTS & CHATS
+    async function requestBook(bookId) {
       if (!currentUser) {
         alert('Please login or register first to send an exchange request.');
         showView('authView');
@@ -657,23 +662,52 @@
       const book = booksData.find(b => b.id === bookId);
       if (!book) return;
 
-      const newReq = {
-        id: 'req_' + Date.now(),
-        bookId: book.id,
-        bookTitle: book.title,
-        sellerName: book.sellerName,
-        buyerName: currentUser.displayName,
-        status: 'Pending'
-      };
+      try {
+        const reqRef = await window.fbMethods.addDoc(window.fbMethods.collection(window.db, "requests"), {
+          bookId: book.id,
+          bookTitle: book.title,
+          sellerName: book.sellerName,
+          sellerId: book.sellerId || 'anon',
+          buyerName: currentUser.displayName,
+          buyerId: currentUser.uid,
+          status: 'Pending',
+          createdAt: window.fbMethods.serverTimestamp()
+        });
 
-      requestsData.push(newReq);
-      messagesData[newReq.id] = [
-        { sender: 'System', text: `Exchange request initiated for "${book.title}".` }
-      ];
+        // Add initial system message to firestore sub-collection
+        await window.fbMethods.addDoc(window.fbMethods.collection(window.db, "messages"), {
+          requestId: reqRef.id,
+          sender: 'System',
+          text: `Exchange request initiated for "${book.title}".`,
+          timestamp: window.fbMethods.serverTimestamp()
+        });
 
-      alert(`Request sent to ${book.sellerName}! Opening chat view.`);
-      showView('requestsView');
-      selectChat(newReq.id);
+        alert(`Request sent to ${book.sellerName}! Opening real-time chat.`);
+        showView('requestsView');
+        selectChat(reqRef.id);
+      } catch (err) {
+        alert('Request Error: ' + err.message);
+      }
+    }
+
+    function listenToFirestoreRequests() {
+      if (!currentUser) return;
+
+      const q = window.fbMethods.query(
+        window.fbMethods.collection(window.db, "requests"),
+        window.fbMethods.orderBy("createdAt", "desc")
+      );
+
+      window.fbMethods.onSnapshot(q, (snapshot) => {
+        requestsData = [];
+        snapshot.forEach(docSnap => {
+          const req = { id: docSnap.id, ...docSnap.data() };
+          if (req.buyerId === currentUser.uid || req.sellerId === currentUser.uid) {
+            requestsData.push(req);
+          }
+        });
+        renderRequests();
+      });
     }
 
     function renderRequests() {
@@ -699,27 +733,39 @@
       renderRequests();
       
       const req = requestsData.find(r => r.id === reqId);
-      if (!req) return;
+      if (req) {
+        document.getElementById('chatTitle').innerText = req.bookTitle;
+        document.getElementById('chatSub').innerText = `Chatting with ${req.sellerName}`;
+      }
 
-      document.getElementById('chatTitle').innerText = req.bookTitle;
-      document.getElementById('chatSub').innerText = `Chatting with ${req.sellerName}`;
-      
-      const msgs = messagesData[reqId] || [];
-      const msgBox = document.getElementById('chatMessages');
-      msgBox.classList.remove('flex-col', 'justify-center', 'items-center');
-      
-      msgBox.innerHTML = msgs.map(m => `
-        <div class="flex flex-col ${m.sender === (currentUser ? currentUser.displayName : 'You') ? 'items-end' : 'items-start'}">
-          <span class="text-[9px] text-slate-500 mb-0.5">${m.sender}</span>
-          <div class="max-w-[80%] px-3 py-2 rounded-2xl text-xs ${m.sender === 'System' ? 'bg-slate-800 text-slate-400 italic text-center w-full' : m.sender === (currentUser ? currentUser.displayName : 'You') ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-200'}">
-            ${m.text}
+      if (chatUnsubscribe) chatUnsubscribe();
+
+      const q = window.fbMethods.query(
+        window.fbMethods.collection(window.db, "messages"),
+        window.fbMethods.where("requestId", "==", reqId),
+        window.fbMethods.orderBy("timestamp", "asc")
+      );
+
+      chatUnsubscribe = window.fbMethods.onSnapshot(q, (snapshot) => {
+        const msgs = [];
+        snapshot.forEach(docSnap => msgs.push(docSnap.data()));
+
+        const msgBox = document.getElementById('chatMessages');
+        msgBox.classList.remove('flex-col', 'justify-center', 'items-center');
+
+        msgBox.innerHTML = msgs.map(m => `
+          <div class="flex flex-col ${m.sender === (currentUser ? currentUser.displayName : 'You') ? 'items-end' : 'items-start'}">
+            <span class="text-[9px] text-slate-500 mb-0.5">${m.sender}</span>
+            <div class="max-w-[80%] px-3 py-2 rounded-2xl text-xs ${m.sender === 'System' ? 'bg-slate-800 text-slate-400 italic text-center w-full' : m.sender === (currentUser ? currentUser.displayName : 'You') ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-200'}">
+              ${m.text}
+            </div>
           </div>
-        </div>
-      `).join('');
-      msgBox.scrollTop = msgBox.scrollHeight;
+        `).join('');
+        msgBox.scrollTop = msgBox.scrollHeight;
+      });
     }
 
-    function handleSendMessage(e) {
+    async function handleSendMessage(e) {
       e.preventDefault();
       if (!activeChatRequestId) {
         alert('Please select or create an exchange request first.');
@@ -729,16 +775,17 @@
       const text = input.value.trim();
       if (!text) return;
 
-      if (!messagesData[activeChatRequestId]) messagesData[activeChatRequestId] = [];
-      const senderName = currentUser ? currentUser.displayName : 'You';
-      
-      messagesData[activeChatRequestId].push({
-        sender: senderName,
-        text: text
-      });
-
-      input.value = '';
-      selectChat(activeChatRequestId);
+      try {
+        await window.fbMethods.addDoc(window.fbMethods.collection(window.db, "messages"), {
+          requestId: activeChatRequestId,
+          sender: currentUser ? currentUser.displayName : 'You',
+          text: text,
+          timestamp: window.fbMethods.serverTimestamp()
+        });
+        input.value = '';
+      } catch (err) {
+        alert('Chat Error: ' + err.message);
+      }
     }
 
     function renderAdminDashboard() {
@@ -765,10 +812,13 @@
       `).join('');
     }
 
-    function removeListing(id) {
-      booksData = booksData.filter(b => b.id !== id);
-      renderAdminDashboard();
-      filterBooks();
+    async function removeListing(id) {
+      try {
+        await window.fbMethods.deleteDoc(window.fbMethods.doc(window.db, "books", id));
+        alert('Listing deleted from Firestore!');
+      } catch (err) {
+        console.error(err);
+      }
     }
 
     function renderMyListings() {
