@@ -100,7 +100,7 @@
       serverTimestamp
     };
 
-    console.log("Firebase connected successfully!");
+    console.log("Firebase connected successfully to obes-app-5b1d7!");
   </script>
 </head>
 <body class="custom-scrollbar" onload="initApp()">
@@ -471,6 +471,8 @@
           document.getElementById('userProfileBtn').classList.add('hidden');
           document.getElementById('authToggleBtn').innerText = 'Login / Register';
           document.getElementById('authToggleBtn').onclick = () => showView('authView');
+          requestsData = [];
+          renderRequests();
         }
       });
 
@@ -523,6 +525,7 @@
       e.preventDefault();
       const email = document.getElementById('authEmail').value;
       const password = document.getElementById('authPassword').value;
+      const name = document.getElementById('authName').value || email.split('@')[0];
 
       try {
         if (isRegisterMode) {
@@ -735,7 +738,6 @@
       const req = requestsData.find(r => r.id === reqId);
       if (req) {
         document.getElementById('chatTitle').innerText = req.bookTitle;
-        document.getElementById('chatSub').innerText = `Chatting with ${req.sellerName}`;
       }
 
       if (chatUnsubscribe) chatUnsubscribe();
@@ -754,9 +756,9 @@
         msgBox.classList.remove('flex-col', 'justify-center', 'items-center');
 
         msgBox.innerHTML = msgs.map(m => `
-          <div class="flex flex-col ${m.sender === (currentUser ? currentUser.displayName : 'You') ? 'items-end' : 'items-start'}">
+          <div class="flex flex-col ${currentUser && m.sender === currentUser.displayName ? 'items-end' : 'items-start'}">
             <span class="text-[9px] text-slate-500 mb-0.5">${m.sender}</span>
-            <div class="max-w-[80%] px-3 py-2 rounded-2xl text-xs ${m.sender === 'System' ? 'bg-slate-800 text-slate-400 italic text-center w-full' : m.sender === (currentUser ? currentUser.displayName : 'You') ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-200'}">
+            <div class="max-w-[80%] px-3 py-2 rounded-2xl text-xs ${m.sender === 'System' ? 'bg-slate-800 text-slate-400 italic text-center w-full' : currentUser && m.sender === currentUser.displayName ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-200'}">
               ${m.text}
             </div>
           </div>
