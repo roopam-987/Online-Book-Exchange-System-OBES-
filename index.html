@@ -654,7 +654,7 @@
       }
     }
 
-    // REAL-TIME FIRESTORE REQUESTS & CHATS
+    // REAL-TIME FIRESTORE REQUESTS & CHATS (FIXED TIMESTAMP BUG)
     async function requestBook(bookId) {
       if (!currentUser) {
         alert('Please login or register first to send an exchange request.');
@@ -677,12 +677,12 @@
           createdAt: window.fbMethods.serverTimestamp()
         });
 
-        // Add initial system message to firestore sub-collection
+        // Add initial system message with client timestamp for instant rendering
         await window.fbMethods.addDoc(window.fbMethods.collection(window.db, "messages"), {
           requestId: reqRef.id,
           sender: 'System',
           text: `Exchange request initiated for "${book.title}".`,
-          timestamp: window.fbMethods.serverTimestamp()
+          timestamp: Date.now()
         });
 
         alert(`Request sent to ${book.sellerName}! Opening real-time chat.`);
@@ -742,15 +742,18 @@
 
       if (chatUnsubscribe) chatUnsubscribe();
 
+      // Query without server orderBy to avoid null-timestamp exclusion bug
       const q = window.fbMethods.query(
         window.fbMethods.collection(window.db, "messages"),
-        window.fbMethods.where("requestId", "==", reqId),
-        window.fbMethods.orderBy("timestamp", "asc")
+        window.fbMethods.where("requestId", "==", reqId)
       );
 
       chatUnsubscribe = window.fbMethods.onSnapshot(q, (snapshot) => {
         const msgs = [];
         snapshot.forEach(docSnap => msgs.push(docSnap.data()));
+
+        // Client-side sorting by timestamp safely
+        msgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
         const msgBox = document.getElementById('chatMessages');
         msgBox.classList.remove('flex-col', 'justify-center', 'items-center');
@@ -782,7 +785,7 @@
           requestId: activeChatRequestId,
           sender: currentUser ? currentUser.displayName : 'You',
           text: text,
-          timestamp: window.fbMethods.serverTimestamp()
+          timestamp: Date.now() // Numeric timestamp for instant sync and rendering
         });
         input.value = '';
       } catch (err) {
